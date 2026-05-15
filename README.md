@@ -271,6 +271,76 @@ For detailed setup instructions, troubleshooting, and advanced configuration opt
 - [Backend Documentation](./app/backend/README.md)
 
 
+## Named Workflows (`src/workflows/`)
+
+In addition to the dynamic graph builder (`src/main.py:create_workflow`), the repo ships **fixed-shape, opinionated LangGraph workflows** in `src/workflows/`. These capture specific business scenarios end-to-end with a curated analyst lineup the user does **not** configure. They are the foundation of the Agent Loops capability demoed live in private sales sessions.
+
+### Earnings Reaction Playbook
+
+Six analyst lenses run in parallel after `start_node`, then `risk_management_agent` consolidates, then `portfolio_manager` issues a decision:
+
+| Stage | Nodes |
+|---|---|
+| Parallel fan-out | `fundamentals_analyst`, `sentiment_analyst`, `technical_analyst`, `valuation_analyst`, `warren_buffett`, `michael_burry` |
+| Consolidation | `risk_management_agent` |
+| Decision | `portfolio_manager` |
+
+**Library use** (CLI / scripting):
+
+```python
+from src.workflows import build_earnings_reaction_graph, earnings_reaction_initial_state, memory_checkpointer
+
+graph = build_earnings_reaction_graph(checkpointer=memory_checkpointer())
+state = earnings_reaction_initial_state(
+    tickers=["AAPL"],
+    start_date="2026-02-01",
+    end_date="2026-05-15",
+    portfolio={"cash": 100000, "margin_requirement": 0.0, "positions": {}},
+)
+final = graph.invoke(state, config={"configurable": {"thread_id": "run-001"}})
+```
+
+**HTTP endpoint** (auth-gated; from a running `server.main:app`):
+
+```
+POST /api/workflows/earnings-reaction/run
+Authorization: Bearer <AHF_APP_TOKEN>          # only if AHF_APP_TOKEN is set
+Content-Type: application/json
+
+{
+  "tickers": ["AAPL", "MSFT"],
+  "start_date": "2026-02-01",
+  "end_date": "2026-05-15",
+  "model_name": "claude-3-5-sonnet-latest",
+  "model_provider": "Anthropic",
+  "thread_id": "earnings-run-2026-q1-aapl"   // optional; for resumable runs
+}
+```
+
+Response is the standard `RunSummary` shape (same as `/api/runs`). The `selected_analysts` field of the request is **ignored** — the playbook fixes the lineup; the response echoes the fixed lineup back.
+
+### Checkpointing
+
+Two modes:
+
+* `memory_checkpointer()` — `MemorySaver`, zero-config, state lost on process exit. Default for tests.
+* `sqlite_checkpointer(db_path)` — `SqliteSaver` context manager. State persists across process restart; runs resume from the last checkpoint when invoked with the same `thread_id`. Use in the live demo server.
+
+```python
+from src.workflows import build_earnings_reaction_graph, sqlite_checkpointer
+
+with sqlite_checkpointer("./data/earnings_reaction.db") as saver:
+    graph = build_earnings_reaction_graph(checkpointer=saver)
+    # ... invoke with thread_id; crash; restart; same thread_id resumes from checkpoint
+```
+
+### Design rationale
+
+See [`docs/decisions/ADR-006-earnings-reaction-playbook-and-claude-sdk-comparison.md`](./docs/decisions/ADR-006-earnings-reaction-playbook-and-claude-sdk-comparison.md) — covers why this is a fixed playbook (not user-configurable), why LangGraph stays the orchestrator here vs where Claude Agent SDK would be the natural choice, and the SqliteSaver compatibility band against `langgraph==0.2.56`.
+
+For the live-demo script (8 minutes including the crash-recovery moment) see [`docs/sales-demo.md`](./docs/sales-demo.md). For the pre-call rehearsal checklist see [`docs/pre-demo-checklist.md`](./docs/pre-demo-checklist.md).
+
+
 ## Contributing
 
 1. Fork the repository

@@ -16,6 +16,7 @@ from .api import health as health_api
 from .api import reference as reference_api
 from .api import runs as runs_api
 from .api import tickers as tickers_api
+from .api import workflows as workflows_api
 from .auth.middleware import require_token
 from .config import get_settings
 from .db.session import init_db
@@ -69,6 +70,11 @@ def create_app() -> FastAPI:
         backtests_api.router,
         prefix="/api",
         tags=["backtests"],
+        dependencies=[Depends(require_token)],
+    )
+    app.include_router(
+        workflows_api.router,
+        prefix="/api",
         dependencies=[Depends(require_token)],
     )
     app.include_router(tickers_api.router, prefix="/api", tags=["tickers"])

@@ -227,3 +227,30 @@ class HealthResponse(BaseModel):
     version: str
     providers_configured: dict[str, bool]
     db_ok: bool
+
+
+# ---------------------------------------------------------------------------
+# Workflows (Phase 2 — Earnings Reaction Playbook)
+# ---------------------------------------------------------------------------
+
+
+class EarningsReactionRequest(AnalyzeRequest):
+    """Input contract for ``POST /api/workflows/earnings-reaction/run``.
+
+    Inherits ticker validation, date canonicalisation, portfolio shape, and
+    model selection from :class:`AnalyzeRequest`.
+
+    The ``selected_analysts`` field is **ignored** by this endpoint — the
+    Earnings Reaction Playbook fixes its six analyst lenses (see
+    :data:`src.workflows.earnings_reaction.EARNINGS_REACTION_ANALYSTS`). It is
+    accepted in the payload so callers can reuse the AnalyzeRequest shape, and
+    set on the response config for parity with ``/api/runs``.
+    """
+
+    thread_id: str | None = None
+    """Optional thread ID for resumable runs via the SqliteSaver checkpoint.
+
+    When omitted, the server generates one. When supplied and the workflow has
+    a checkpointer configured, the run resumes from the last persisted state
+    for that thread.
+    """
